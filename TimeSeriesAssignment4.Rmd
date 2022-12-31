@@ -1,0 +1,218 @@
+---
+title: "Time Series Assignment 4"
+author: "Gavin Connolly"
+date: "23/11/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library("forecast")
+library("TSA")
+library("lmtest")
+library("tseries")
+library("urca")
+```
+
+## Exercise 1
+
+#### You observe a time series {x} = (−1, 6, 1, 20, 28, 14, 30, 21, 18, 20)
+#### (a) Fit an AR(1) model with drift and report the estimates for the coefficients in your model.
+
+```{r Q1 a)}
+x = c(-1, 6, 1, 20, 28, 14, 30, 21, 18, 20)
+plot(x, type = 'l')
+```
+```{r model}
+modelx = Arima(x, order = c(1, 0, 0), include.drift = T)
+coeftest(modelx)
+```
+
+Model reports coefficients of:
+
+* 0.044 for the autoregressive term $\phi_1$
+* 2.68 for the intercept term
+* 2.357 for the drift term $\mu$
+
+Only the drift term is significant in this case.
+
+#### (b) What are the minimum mean squared error forecasts for the next 10 timepoints?
+
+```{r Q1 b)}
+forecast(modelx, h = 10)$mean
+# Model includes a drift component, meaning the model will tend toward infinity as expectation of the random component = 0
+```
+
+```{r Q1 b_ plot forecast}
+plot(x, xlim = c(0,20), ylim = c(0,50))
+lines(union(fitted(modelx), forecast(modelx, h = 10)$mean))
+```
+
+#### (c) Comment on these forecasts. What are they moving towards and why?
+
+Forecasts moving towards infinity as there is a positive drift term present in the time series model meaning that as the model is unbounded and increasing linearly with time, the forecast tends to infinity as the number of time points tends to infinity.
+
+## Exercise 2
+
+#### Look at the prescrip time series dataset in the TSA package by running library(TSA) and data(prescrip). This is monthly U.S. average prescription costs for 68 months from August 1986.
+
+```{r load prescrip data}
+data(prescrip)
+prescrip
+plot(prescrip)
+```
+
+#### (a) Use the Augmented Dickey-Fuller test to test for whether the time series has a unit root, assuming a significance level of 0.05 and setting the lag order to be k = 0 so that the alternative hypothesis is a model with a linear trend and one autoregressive coefficient. What do you conclude and why? 
+
+```{r Q2 a)}
+adf.test(prescrip, k = 0)
+# fail to reject null hypothesis of unit root
+```
+
+Augmented Dickey-Fuller Test returns test statistic of -2.8, which has a corresponding p-value of 0.25. As this is does not fall below the critical value of 0.05 for this test, we fail to reject the null hypothesis that the time series has a unit root. We therefore conclude that the time series is integrated, as there is not sufficient evidence to reject our null hypothesis.
+
+#### (b) 
+We’d also like to find the  $\Phi_2$ test statistic for the test whether ($\alpha$, $\beta$, $\phi$) = (0, 0, 1) in the model given by:
+
+$X_t = \alpha + \beta t + \phi X_{t−1} + \epsilon_t.$
+where $X_t$ is the average prescription cost in month t. This model can be re-written as:
+
+$\Delta X_t = \alpha + \beta t + \omega X_{t−1} + \epsilon_t$.
+(where  $\omega = \phi−1$). 
+To do this you first fit a linear model to the time series to estimate the coefficients:
+
+      n=length(prescrip)
+      
+      tt=2:n # convenience vector of time indices
+      
+      y=diff(prescrip) # first difference of the series
+      
+      fit=lm(y˜tt+prescrip[-n]) # estimate alpha, omega x[t-1], beta
+      
+      yhat=fitted(fit)
+      
+Once this is done, $\Phi_2$ (equivalent to an F statistic) will be given by the ratio of explained to unexplained variance. 
+This in turn is equal to the ratio of the sum of squares of the model divided by the degrees of freedom of the model to the sum of squares of the errors divided by the degrees of freedom of the errors:
+
+$\Phi_2 = \frac{SSM/dof_m}{SSE/dof_e}$.
+
+where,
+$$SSM = \sum^{n}_{t=1} \hat{y}_t^2$$ 
+$$SSE = \sum^{n}_{t=1} (y-\hat{y}_t)^2$$ 
+\textbf{Hint:} you can for example use SSE=sum((y-yhat)ˆ2) for the sum or squared errors and the degrees of freedom are p for the model and n − p − 1 for the errors, where p = 3 is the number of parameters.
+
+```{r Q2 b)}
+n = length(prescrip)
+tt = 2:n
+y= diff(prescrip)
+fit = lm(y~tt+prescrip[-n])
+yhat = fitted(fit)
+
+SSM = sum(yhat^2)
+SSE = sum((y-yhat)^2)
+dofM = 3
+dofE = n-4 # length of y = n, so dofE = n-1-3 = n-4
+phi2 = (SSM/dofM)/(SSE/dofE)
+phi2 # phi2 = 8.8117
+```
+Filling in the values for the sum of square of the model, the sum of squares of the errors, the degrees of freedom of the model & the degrees of freedom of the errors, we get $\Phi_2 = 8.8117$
+
+#### (c) Load the urca package and verify this test statistic. You can find it by using the ur.df function with arguments type='trend' and lags=0 and then calling summary() on the result. You are looking for the F-statistic: What is the difference between this test and the test of part (a)?
+
+```{r Q2 c)}
+test = ur.df(prescrip, type = 'trend', lags = 0)
+summary(test)
+```
+
+From the summary of the ur.df test output we see that the $\Phi_2$–statistic for the test is also equal to 8.8117.
+
+## Exercise 3
+
+#### Load the beersales dataset in the TSA package by running data(beersales). You will model monthly beersales in millions of barrels and perform the following tasks.
+
+#### (a) Create plots using tsdisplay() and comment on them. Also perform an Augmented Dickey- Fuller test for unit roots and comment on the result.
+
+```{r Q3 a)}
+data(beersales)
+tsdisplay(beersales)
+```
+
+From the ACF plot we can clearly see that there is a seasonal component with a period of 12 lags in the data. The magnitude of the seasonal component does not appear to evolve with time, suggesting an additive decomposition for the seasonal component, rather than a multiplicative one.
+
+From the plot of the time series itself we can also see that there appears to be an increasing trend component to the data, with this trend component seeming to level off for later time points.
+
+```{r Q3 a) adf test}
+adf.test(beersales)
+# ADF test reports p-value < 0.01, so we reject null hypothesis and conclude there is no unit root & that series is stationary.
+```
+
+The ADF test reports a p-value which is less than 0.01, meaning we reject the null hypothesis that there is a unit root to the time series at a 1% level of significance, and accept the alternative hypothesis that no unit root exists and therefore the series is stationary with a trend component.
+
+#### (b) Estimate a trend by smoothing the series and plot it. What order do you choose for the moving average smoother and why?
+
+```{r Q3 b)}
+TC = ma(beersales, 12) # chose order 12 for MA smoother as peaks/troughs of ACF separated by 12 time lags 
+```
+
+We choose a 12-MA smoother as the period of the seasonal component is 12 time points (peaks/troughs in the ACF plot of the series separated by 12 time lags).
+
+```{r Q3 b) plot Trend Component}
+plot(TC)
+```
+
+#### (c) Hence decompose the time series as an additive model with trend, seasonal, and random components. Find the seasonal and random components and plot them against time. Centre the seasonal component on zero.
+
+```{r Q3 c) Calculate Seasonal & random components}
+pseudo_S = beersales-TC
+matrix_S = matrix(pseudo_S, nrow = 12)
+s = rowMeans(matrix_S, na.rm = TRUE)
+S = s-mean(s) # Centre seasonal component
+R = beersales - TC - S # Calculate random component
+```
+
+```{r Plot Seasonal component}
+plot(rep(S, 16), type = 'l')
+```
+
+```{r plot random component}
+plot(R)
+```
+
+#### (d) Fit a linear trend by fitting a linear model using linear tc=lm(TC˜time(beersales)). Then create the deterministic part of a forecast by adding the trend and seasonal components extrapolated forward 2 years. Hint: You should use deltat(beersales) to get the time gap between time points.
+
+```{r Q3 d)}
+linear_TC = lm(TC~time(beersales))
+t = deltat(beersales)
+newdata = seq(1991, 1993-t, t)
+pred_TC = linear_TC$coefficients[2]*newdata + linear_TC$coefficients[1]
+pred_beersales = pred_TC + rep(S, 2)
+pred_beersales
+```
+
+#### (e) Use the above to calculate the minimum means-squared error forecast for the next 2 years and plot the mean of this forecast.
+
+```{r Q3 e)}
+LinTC = linear_TC$coefficients[2]*time(beersales) + linear_TC$coefficients[1]
+fit_beersales = LinTC + rep(S, 16)
+res_fit = beersales - fit_beersales
+tsdisplay(res_fit) # ACF & PACF plots of residuals both tail off indicating an ARMA process
+```
+
+```{r Q3 e) fit model}
+model_res = Arima(res_fit, order = c(1, 0, 1), include.mean = F)
+coeftest(model_res)
+```
+
+```{r Q3 e) forecast 30 time periods}
+f_res = forecast(model_res, h = 30)
+
+msef = pred_beersales + f_res$mean[-c(1:6)]
+msef
+```
+
+```{r Q3 e) plot min mean squared error forecast}
+plot(msef, type = 'l')
+```
+
+```{r Q3 e) Final plot of forecast}
+plot(beersales, xlim=c(time(beersales)[1], newdata[length(newdata)]), ylim=c(8, 20))
+lines(newdata, msef, col=4)
